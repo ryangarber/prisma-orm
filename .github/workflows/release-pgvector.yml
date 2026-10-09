@@ -1,0 +1,83 @@
+name: Release pgvector extension
+
+# Releases the forked @ryangarber/prisma-orm-extension-pgvector at the version
+# committed in its package.json (see its README for the versioning scheme).
+#   - push to `fork`      → dry run: build, pack, keep the tarball as a workflow artifact
+#   - workflow_dispatch   → build, pack, upload the tarball to a GitHub release, publish to npm
+
+on:
+  push:
+    branches: [fork]
+    tags: ["!**"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-pgvector
+  cancel-in-progress: false
+
+env:
+  PACKAGE_DIR: packages/9-public/@prisma/orm-extension-pgvector
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/fork' }}
+    permissions:
+      contents: write # Create the release and its tag
+      id-token: write # npm OIDC Trusted Publishing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Configure npm
+        run: pnpm config set registry https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./$PACKAGE_DIR/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # NODE_AUTH_TOKEN / NPM_TOKEN are intentionally not set: either would
+      # block npm from authenticating via Trusted Publishing.
+      - name: Release
+        uses: ryangarber/rylease@v3
+        with:
+          dry-run: ${{ github.event_name != 'workflow_dispatch' }}
+          version: ${{ steps.version.outputs.version }}
+          scheme: semver
+          history: git/tags
+          tag: "pgvector-v{version}"
+          steps: |
+            - uses: exec/command
+              with:
+                phase: release
+                command: pnpm build --filter=@internal/extension-pgvector...
+                dryRun: pnpm build --filter=@internal/extension-pgvector...
+            - uses: exec/command
+              with:
+                phase: release
+                command: pnpm build --filter=@ryangarber/prisma-orm-extension-pgvector...
+                dryRun: pnpm build --filter=@ryangarber/prisma-orm-extension-pgvector...
+            - uses: exec/command
+              with:
+                phase: release
+                cwd: ${{ env.PACKAGE_DIR }}
+                command: pnpm pack
+                dryRun: pnpm pack
+            - uses: github/upload-release-assets
+              with:
+                files: ["${{ env.PACKAGE_DIR }}/*.tgz"]
+                dryRunArtifact: true
+                prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+            - uses: npm/publish
+              with:
+                path: ${{ env.PACKAGE_DIR }}
+                tag: latest
+                provenance: true
