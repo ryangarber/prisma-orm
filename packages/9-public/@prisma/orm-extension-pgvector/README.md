@@ -18,6 +18,8 @@ The original extension doesn't support embeddings with variable dimensions. This
 
 It is intended for this fork to stay as close as possible to the original until the Prisma team (hopefully) introduces this support officially.
 
+> Update: Merged into `@prisma/orm-extension-pgvector` at `v8.0.0-rc.25`! This package will no longer receive updates; please migrate to the official package instead.
+
 Versions are matched to the latest official version, plus an optional letter in the case of patches specific to the fork:
 
 | RC 1       | RC 1, Patch 1 |
